@@ -61,7 +61,6 @@ def main():
     else:
         print("No pretrained model found, initializing new model.")
 
-        # 初始化 PPO 模型
         model = PPO(
             "MlpPolicy",              # 策略网络类型
             train_env,                # 训练环境
@@ -111,6 +110,7 @@ def main():
         callback=callbacks,
         tb_log_name='BVRAC_2dim',
         reset_num_timesteps=False,
+        progress_bar=True
     )
 
     model.save(os.path.join(log_dir, 'final_model'))
@@ -129,4 +129,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-

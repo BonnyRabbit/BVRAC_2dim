@@ -13,6 +13,9 @@ class BVRAC(gym.Env):
         self.time_step = 0
         self.state_prev = None
         self.n_actions = 3
+        self.reward_dist_500 = False
+        self.reward_dist_300 = False
+        self.reward_dist_100 = False
         # action:dphi
         self.action_space = spaces.Discrete(self.n_actions)
         # state:[x, y, x_t, y_t, phi, phi_t, psi, psi_t]
@@ -48,6 +51,9 @@ class BVRAC(gym.Env):
         if seed is not None:
             self.seed(seed)
         self.time_step = 0
+        self.reward_dist_500 = False
+        self.reward_dist_300 = False
+        self.reward_dist_100 = False
         # 给定初值
         initial_state: Dict[str, float] = {
             'x': 0.0,
@@ -126,6 +132,16 @@ class BVRAC(gym.Env):
         angle_2_aspect = state['ATA']
 
         reward += ((1 - aspect_angle/np.pi) + (1 - angle_2_aspect/np.pi) /2) * math.exp((-abs(dist-dist_disired)/dist))
+        if dist <= 500 and not self.reward_dist_500:
+            reward += 20
+            self.reward_dist_500 = True
+        if dist <= 300 and not self.reward_dist_300:
+            reward += 30
+            self.reward_dist_300 = True
+        if dist <= 100 and not self.reward_dist_100:
+            reward += 50
+            self.reward_dist_100 = True
+            
         return reward
     
     def run(self, state, action):

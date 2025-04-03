@@ -1,0 +1,12 @@
+*.log
+*.tmp
+*.mat
+/__pycache__/
+/logs/
+*.yml
+*.json
+*.slx
+*.slxc
+*.m
+*.sldd
+/slprj/

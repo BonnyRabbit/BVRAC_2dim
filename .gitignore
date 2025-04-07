@@ -10,3 +10,5 @@
 *.m
 *.sldd
 /slprj/
+*.png
+*test_ATA.py

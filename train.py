@@ -4,33 +4,38 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from fdmEnv import BVRAC
+from fdmEnv import BVRAC, SIXCLOCK_TRACK
 from callback import TSCallback
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-def make_env():
+stage = 1
+
+def make_env(stage):
     def _init():
-        env = BVRAC()
+        if stage == 1:
+            env = BVRAC()
+        elif stage == 2:
+            env = SIXCLOCK_TRACK()
+        print(f"Environment created: {env}")
         return env
     return _init
 
 def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
-    env = BVRAC()
 
-    log_dir = 'logs'
+    log_dir = f'logs/stage{stage}_Quadrant_12/'
     os.makedirs(log_dir, exist_ok=True)
 
-    pretrained_path = os.path.join(f'logs/', 'best_model/best_model.zip')
+    pretrained_path = os.path.join(f'logs/stage{stage-1}/', 'best_model/best_model.zip')
 
     n_envs = 4
     batch_size = 64
     n_steps = batch_size // n_envs
 
-    eval_env = SubprocVecEnv([make_env() for _ in range(n_envs)])
+    eval_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
 
-    train_env = SubprocVecEnv([make_env() for _ in range(n_envs)])
+    train_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
 
     if os.path.exists(pretrained_path):
         print(f"Loading pretrained model from {pretrained_path}")
@@ -65,7 +70,7 @@ def main():
             "MlpPolicy",              # 策略网络类型
             train_env,                # 训练环境
             device=device,            # 训练设备
-            verbose=1,                # 显示详细信息的级别
+            verbose=0,                # 显示详细信息的级别
             tensorboard_log=log_dir,  # TensorBoard 日志目录
             learning_rate=1e-5,       # 学习率
             n_steps=n_steps,          # 每次更新前在每个环境中运行的步数

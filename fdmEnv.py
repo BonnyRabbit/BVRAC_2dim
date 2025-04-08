@@ -11,14 +11,14 @@ class BVRAC(gym.Env):
         # 部分全局参数
         self.dt = 0.25
         self.time_step = 0
-        self.max_timestep = 4000
+        self.max_timestep = 5000
         self.state_prev = None
         self.n_actions = 3
         self.reward_dist_500 = False
         self.reward_dist_300 = False
         self.reward_dist_100 = False
         # action:dphi
-        self.action_space = spaces.Discrete(self.n_actions)
+        self.action_space = spaces.Box(-1, 1, shape=(1,), dtype=np.float32)
         # state:[x, y, x_t, y_t, phi, phi_t, psi, psi_t]
         low = np.array([
             -1e4*9.8/(340**2), # x
@@ -59,8 +59,8 @@ class BVRAC(gym.Env):
         initial_state: Dict[str, float] = {
             'x': 0.0,
             'y': 0.0,
-            'x_t': np.random.uniform(-3000, 3000),
-            'y_t': np.random.uniform(-2000, 5000),
+            'x_t': np.random.uniform(-5000, 5000),
+            'y_t': np.random.uniform(-5000, 5000),
             'phi': 0,
             'phi_t': 0,
             'psi': 0,
@@ -112,7 +112,7 @@ class BVRAC(gym.Env):
         target_pos = np.array([state['x_t'], state['y_t']])
         distance = np.linalg.norm(pursuer_pos - target_pos)
         # 接近到一定距离内
-        if distance <= 500:
+        if distance <= 100:
             return True, False
         # 超过时间限制
         elif self.time_step >= self.max_timestep:
@@ -156,12 +156,7 @@ class BVRAC(gym.Env):
         psi = state['psi']
         v = 90
         # update
-        if action == 0:
-            dphi = -np.deg2rad(40)
-        if action == 1:
-            dphi = 0
-        if action == 2:
-            dphi = np.deg2rad(40)
+        dphi = action[0] * np.deg2rad(40)
         dx = v * np.sin(psi)
         dy = v * np.cos(psi)
         dpsi = 9.81/v * np.tan(phi)

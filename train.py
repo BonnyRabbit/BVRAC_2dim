@@ -24,7 +24,7 @@ def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
 
-    log_dir = f'logs/stage{stage}_Quadrant_12/'
+    log_dir = f'logs/stage{stage}_action_box/'
     os.makedirs(log_dir, exist_ok=True)
 
     pretrained_path = os.path.join(f'logs/stage{stage-1}/', 'best_model/best_model.zip')

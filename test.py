@@ -8,7 +8,8 @@ from fdmEnv import BVRAC, SIXCLOCK_TRACK
 
 stage = 1
 
-log_dir = f'logs/stage{stage}_Quadrant_12/'
+base_dir = os.path.dirname(os.path.abspath(__file__))
+log_dir = f'logs/stage{stage}_action_box/'
 os.makedirs(log_dir, exist_ok=True)
 # model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 # model_path = os.path.join(log_dir, 'BVRAC_2dim_3740000_steps.zip')
@@ -29,6 +30,7 @@ pursuer_traj = []
 target_traj = []
 ATA_traj = []   
 AA_traj = []
+action_traj = []
 
 while not done:
     action, _ = model.predict(obs)
@@ -48,26 +50,30 @@ while not done:
     ATA_traj.append(ATA)
     AA_traj.append(AA)
     steps.append(step)
+    action_traj.append(action)
     step += 1
 
 pursuer_x, pursuer_y = zip(*pursuer_traj)
 target_x, target_y = zip(*target_traj)
 ATA = ATA_traj
-AA = AA_traj    
+AA = AA_traj
+action = action_traj    
+
+fig_dir = os.path.join(base_dir, 'figs')
+os.makedirs(fig_dir, exist_ok=True)
 
 plt.figure(figsize=(10, 8))
 plt.plot(pursuer_x, pursuer_y, 'b-', label='pursuer')
 plt.plot(target_x, target_y, 'r-', label='target')
-plt.plot(pursuer_x[0], pursuer_y[0], 'bo', label='P_{start point}')
-plt.plot(target_x[0], target_y[0], 'ro', label='T_{start point}')
+plt.plot(pursuer_x[0], pursuer_y[0], 'bo', label=r'$P_{\text{start point}}$')
+plt.plot(target_x[0], target_y[0], 'ro', label=r'$T_{\text{start point}}$')
 plt.xlabel('X (m)')
 plt.ylabel('Y (m)')
 plt.title('trajectory')
 plt.legend()
 plt.grid(True)
 plt.gca().set_aspect('equal')
-# plt.show()
-plt.savefig('trajectory.png')
+plt.savefig(os.path.join(fig_dir, 'trajectory.png'))
 print("图像已保存为 trajectory.png")
 
 plt.figure(figsize=(10, 8))
@@ -78,5 +84,14 @@ plt.ylabel('Angle (deg)')
 plt.title('ATA and AA vs Time')
 plt.legend()
 plt.grid(True)
-plt.savefig('angles_vs_step.png')
+plt.savefig(os.path.join(fig_dir, 'angles_vs_time.png'))
 print("图像已保存为 angles_vs_time.png")
+
+plt.figure(figsize=(10, 8))
+plt.plot(np.array(steps) * 0.25, action_traj, 'g-', label='dphi (rad/s)')
+plt.ylabel('dphi (rad/s)')
+plt.title('dphi vs Time')
+plt.legend()
+plt.grid(True)
+plt.savefig(os.path.join(fig_dir, 'dphi_vs_time.png'))
+print("图像已保存为 dphi_vs_time.png")

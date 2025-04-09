@@ -156,7 +156,7 @@ class BVRAC(gym.Env):
         psi = state['psi']
         v = 90
         # update
-        dphi = action[0] * np.deg2rad(40)
+        dphi = np.clip(action[0], -1, 1) * np.deg2rad(40)
         dx = v * np.sin(psi)
         dy = v * np.cos(psi)
         dpsi = 9.81/v * np.tan(phi)

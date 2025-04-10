@@ -16,10 +16,10 @@ class TSCallback(BaseCallback):
 
         self.episode_buffers: Dict[int, dict] = {}
         self.episode_counter = 0
-        self.action_names = ['dphi']
+        self.action_names = ['dphi', 'dv']
         self.obs_names = [
-            'x', 'y', 'x_t', 'y_t', 'phi', 'phi_t', 'psi', 'psi_t',
-            'AA', 'ATA'
+            'x', 'y', 'x_t', 'y_t', 'rel_dist', 'v', 'v_t', 'phi', 'phi_t', 'psi', 'psi_t',
+            'ATA', 'AA'
         ]
 
     def _init_callback(self) -> None:
@@ -29,8 +29,10 @@ class TSCallback(BaseCallback):
     def _convert_value(self, name: str, value: float) -> float:
         if name in ['dphi', 'phi', 'phi_t', 'psi', 'psi_t', 'AA', 'ATA']:
             return value * 180 / np.pi
-        elif name in ['x', 'y', 'x_t', 'y_t']:
+        elif name in ['x', 'y', 'x_t', 'y_t', 'rel_dist']:
             return value * (340**2) / 9.8
+        elif name in ['v', 'v_t']:
+            return value * 340 / 9.8
         else:
             return value
 
@@ -46,7 +48,12 @@ class TSCallback(BaseCallback):
                 }
 
             buffer = self.episode_buffers[env_idx]
-            buffer['actions'].append(self.locals['actions'][env_idx])
+            action = self.locals['actions'][env_idx]
+            clipped_action = np.array([
+                np.clip(action[0], -1, 1) * np.deg2rad(30),
+                np.clip(action[1], -1, 1) * 1
+            ])
+            buffer['actions'].append(clipped_action)
             buffer['observations'].append(self.locals['new_obs'][env_idx])
             buffer['rewards'].append(self.locals['rewards'][env_idx])
 

@@ -3,12 +3,12 @@ import time
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from fdmEnv import BVRAC, SIXCLOCK_TRACK
 from callback import TSCallback
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-stage = 1
+stage = 2
 
 def make_env(stage):
     def _init():
@@ -24,10 +24,10 @@ def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
 
-    log_dir = f'logs/stage{stage}_action_box/'
+    log_dir = f'logs/stage{stage}_keep_intrack/'
     os.makedirs(log_dir, exist_ok=True)
 
-    pretrained_path = os.path.join(f'logs/stage{stage-1}/', 'best_model/best_model.zip')
+    pretrained_path = os.path.join(f'logs/stage{stage}/', 'best_model/best_model.zip')
 
     n_envs = 4
     batch_size = 64
@@ -36,6 +36,9 @@ def main():
     eval_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
 
     train_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
+# 单一环境pdb.set_trace()用于调试
+    # eval_env = DummyVecEnv([make_env(stage=stage) for _ in range(n_envs)])
+    # train_env = DummyVecEnv([make_env(stage=stage) for _ in range(n_envs)])
 
     if os.path.exists(pretrained_path):
         print(f"Loading pretrained model from {pretrained_path}")
@@ -89,7 +92,6 @@ def main():
                     )
                 )  # pi、vf 网络结构
         )
-
 
     callbacks = [
         CheckpointCallback(

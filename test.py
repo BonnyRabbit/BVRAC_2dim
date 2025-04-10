@@ -6,10 +6,10 @@ from stable_baselines3 import PPO
 
 from fdmEnv import BVRAC, SIXCLOCK_TRACK
 
-stage = 1
+stage = 2
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-log_dir = f'logs/stage{stage}_action_box/'
+log_dir = f'logs/stage{stage}_keep_intrack/'
 os.makedirs(log_dir, exist_ok=True)
 # model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 # model_path = os.path.join(log_dir, 'BVRAC_2dim_3740000_steps.zip')
@@ -42,8 +42,8 @@ while not done:
     pursuer_y = obs[1] * scaling_factor
     target_x = obs[2] * scaling_factor
     target_y = obs[3] * scaling_factor
-    ATA = obs[8] * 180/np.pi
-    AA = obs[9] * 180/np.pi
+    ATA = obs[11] * 180/np.pi
+    AA = obs[12] * 180/np.pi
     
     pursuer_traj.append((pursuer_x, pursuer_y))
     target_traj.append((target_x, target_y))

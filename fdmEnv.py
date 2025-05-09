@@ -11,14 +11,12 @@ class BVRAC(gym.Env):
         # 部分全局参数
         self.dt = 0.25
         self.time_step = 0
-        self.max_timestep = 5000
+        self.max_timestep = 3000
         self.state_prev = None
-        self.reward_dist_500 = False
-        self.reward_dist_300 = False
-        self.reward_dist_100 = False
+        self.reward_flags = {dist: False for dist in [2000, 1350, 800, 500]}
         # action:[dphi, dv]
         self.action_space = spaces.Box(-1, 1, shape=(2,), dtype=np.float32)
-        # state:[x, y, x_t, y_t, phi, phi_t, psi, psi_t]
+        # state:[x, y, x_t, y_t,rel_state, v, v_t, phi, phi_t, psi, psi_t, AA, ATA]
         low = np.array([
             -1e4*9.8/(340**2), # x
             -1e4*9.8/(340**2), # y
@@ -40,7 +38,7 @@ class BVRAC(gym.Env):
              1e4*9.8/(340**2), # x_t
              1e4*9.8/(340**2), # y_t
              1.4e4*9.8/(340**2), # rel_dist
-             130*9.8/340, # v
+             120*9.8/340, # v
              100*9.8/340, # v_t
              np.pi/6, # phi
              np.pi/6, # phi_t
@@ -57,21 +55,24 @@ class BVRAC(gym.Env):
         if seed is not None:
             self.seed(seed)
         self.time_step = 0
-        self.reward_dist_500 = False
-        self.reward_dist_300 = False
-        self.reward_dist_50 = False
+        self.reward_flags = {dist: False for dist in [2000, 1350, 800, 500]}
+        radius = np.random.uniform(4000, 6000)
+        angle = np.random.uniform(0, 2 * np.pi)
+        x_t = radius * np.cos(angle)
+        y_t = radius * np.sin(angle)
+        psi_t = np.arctan2(x_t, y_t)
 
         initial_state: Dict[str, float] = {
             'x': 0.0,
             'y': 0.0,
-            'x_t': np.random.uniform(-5000, 5000),
-            'y_t': np.random.uniform(-5000, 5000),
+            'x_t': x_t,
+            'y_t': y_t,
             'v': 90,
             'v_t': 60,
             'phi': 0,
             'phi_t': 0,
             'psi': 0,
-            'psi_t': np.random.uniform(-np.pi, np.pi)
+            'psi_t': psi_t
         }
         # 计算rel_dist ATA 和 AA
         pursuer_pos = np.array([initial_state['x'],initial_state['y']])
@@ -150,12 +151,9 @@ class BVRAC(gym.Env):
         angle_2_aspect = state['ATA']
 
         reward += w_reward * (1 - angle_2_aspect/(np.pi/6))
-        if dist <= 500 and not self.reward_dist_500:
+        if dist <= 2000 and not self.reward_flags[2000]:
             reward += 20
-            self.reward_dist_500 = True
-        if dist <= 300 and not self.reward_dist_300:
-            reward += 30
-            self.reward_dist_300 = True
+            self.reward_flags[2000] = True
         if dist <= 100 and not self.reward_dist_100:
             reward += 50
             self.reward_dist_100 = True
@@ -170,11 +168,11 @@ class BVRAC(gym.Env):
         psi = state['psi']
         # update
         dphi = np.clip(action[0], -1, 1) * np.deg2rad(30)
-        dv = np.clip(action[1], -1, 1) * 1
+        dv = np.clip(action[1], -1, 1) * 4
         dx = v * np.sin(psi)
         dy = v * np.cos(psi)
         v += dv * self.dt
-        v = np.clip(v, 50, 130)
+        v = np.clip(v, 60, 120)
         dpsi = 9.81/v * np.tan(phi)
         phi += dphi * self.dt
         psi += dpsi * self.dt
@@ -199,13 +197,6 @@ class BVRAC(gym.Env):
         pursuer_pos = np.array([state['x'], state['y']])
         target_pos = np.array([state['x_t'], state['y_t']])
         rel_dist = np.linalg.norm(pursuer_pos - target_pos)
-
-        # 判断是否在尾追优势区
-        self.track_inbound = 200 <= rel_dist <=300
-        if self.track_inbound:
-            self.step_track_inboud += 1
-        else:
-            self.step_track_inboud = 0
         
         phi = np.clip(phi,np.deg2rad(-30),np.deg2rad(30))
         psi = BVRAC.check_heading(psi)
@@ -213,6 +204,22 @@ class BVRAC(gym.Env):
 
         aspect_angle = BVRAC.compute_AATA(x, y, x_t, y_t, psi_t)
         angle2aspect = BVRAC.compute_AATA(x, y, x_t, y_t, psi)
+
+                # 判断是否丢失视线
+        if angle2aspect <= np.deg2rad(30):
+            self.ATA_lost_step = 0
+            self.first_ATAgood = True # 第一次进入视线优势区
+            self.ATA_lost = False 
+        else:
+            self.ATA_lost_step += 1
+            if self.first_ATAgood:
+                self.ATA_lost = self.ATA_lost_step >= 50
+        # 判断是否在尾追优势区
+        self.track_inbound = 150 <= rel_dist <=450
+        if self.track_inbound:
+            self.step_track_inboud += 1
+        else:
+            self.step_track_inboud = 0
         # 返回state
         state = {
             'x': x,
@@ -252,7 +259,6 @@ class BVRAC(gym.Env):
         AATA = np.arccos(dot_LOS_v)
         return AATA
 
-    
     def get_info(self, state):
         return {}
     
@@ -260,55 +266,94 @@ class SIXCLOCK_TRACK(BVRAC):
     def __init__(self):
         super().__init__()
         self.step_track_inboud = 0
-        self.max_reward_angle = 15
-        self.max_reward_dist = 10
+        self.track_inbound = False
+        self.speed_keep_step = 0
+        self.ATA_lost = False
+        self.ATA_lost_step = 0
+        self.first_ATAgood = False
+        # 奖励权重
+        self.max_reward_angle = 30
+        self.max_reward_speed = 20
         self.reward_weights = {
             'angle': self.max_reward_angle / self.max_timestep,
-            'dist': self.max_reward_dist / self.max_timestep
+            'speed': self.max_reward_speed / self.max_timestep
         }
-    
     def reset(self, seed=None):
         observation, _ = super().reset(seed)
         self.track_inbound = False
         self.step_track_inboud = 0
+        self.speed_keep_step = 0
+        self.ATA_lost = False
+        self.ATA_lost_step = 0
+        self.first_ATAgood = False
         return observation, {}
     
     def get_reward(self, state):
         reward = 0.0
-        reward_dist = 0.0
         reward_ATA = 0.0
+        reward_speed = 0.0
         rel_speed = (state['v'] - state['v_t'])
-        rel_dist = state['rel_dist']
-
-        if rel_dist <= 0:
-            rel_dist = 1e-6
-        angle_2_aspect = state['ATA']
-        # 1.稠密奖励，通过方向角引导获得回合奖励
-        reward_ATA = 1 - np.abs(angle_2_aspect/np.deg2rad(30))
-        # 2.稀疏奖励，通过距离
-        if rel_dist <= 500 and not self.reward_dist_500:
-            reward += 20
-            self.reward_dist_500 = True
-        # 3.稠密奖励，通过保持200-300m距离尾追获得引导
-        # if self.track_inbound:
-        if self.reward_dist_500:
-            reward_dist = 1 - np.abs(rel_speed / 40)
+        if abs(rel_speed) <= 5:
+            self.speed_keep_step += 1
         else:
-            self.step_track_inboud = 0
-        # 4.稀疏奖励，通过保持位置+持续时间获得回合奖励
-        if self.track_inbound and self.step_track_inboud >= 500:
-            reward += 15
+            self.speed_keep_step = 0
+
+        rel_dist = max(state['rel_dist'], 1e-6)
+        angle_2_aspect = state['ATA']
+        v_des = 60 + np.sqrt(max(0, 72 * (rel_dist - 250) / 35))
+        v_tol = 5
+
+        # 奖励计算
+        reward_ATA = 1 - abs(angle_2_aspect / (np.deg2rad(30)))
+        # 距离较远时鼓励加速追踪：
+        if rel_dist >= 2000:
+            reward_speed -= (120 - state['v']) / 60
+        # 初次接近2km时，稀疏奖励
+        if 300 <= rel_dist <= 2000 and not self.reward_flags[2000]:
+            reward += 20.0
+            self.reward_flags[2000] = True
+        # 距离较近时鼓励减速尾追，多个flag引导任务：
+        if 300 <= rel_dist <= 2000:
+            reward_speed -= abs(state['v'] - v_des) / v_tol
+        reward_dist = [
+            (1350, 20.0),
+            (800, 20.0),
+            (500, 20.0)
+        ]
+        for dist, r in reward_dist:
+            if rel_dist <= dist and abs(state['v'] - v_des) <= v_tol and not self.reward_flags[dist]:
+                reward += r
+                self.reward_flags[dist] = True
+        # 进入zone:
+        if self.track_inbound:
+            reward_speed -= rel_speed / v_tol
+        # 保持奖励
+        if self.track_inbound and abs(rel_speed) <= 5 and self.step_track_inboud >= 200:
+            reward += 100.0
+        # 跟丢惩罚
+        if rel_dist >= 2000 and self.reward_flags[2000]:
+            reward -= 20
+        if self.ATA_lost and self.first_ATAgood:
+            reward -= 20
 
         reward += (
-            self.reward_weights['angle'] * reward_ATA +
-            self.reward_weights['dist'] * reward_dist
+            self.reward_weights['speed'] * reward_speed +
+            self.reward_weights['angle'] * reward_ATA
         )
         return reward
 
     def get_done(self, state):
         rel_dist = state['rel_dist']
+        rel_speed = state['v'] - state['v_t']
+        angle_2_aspect = state['ATA']
         # 200-300m内且尾追一段时间
-        if self.track_inbound and self.step_track_inboud > 500:
+        if self.track_inbound and abs(rel_speed) <= 5 and self.step_track_inboud >= 200:
+            return True, False
+        # if rel_dist <= 1500 and abs(rel_speed) < 5 and self.speed_keep_step >= 200:
+        #     return True, False
+        if rel_dist >= 2000 and self.reward_flags[2000]:
+            return True, False
+        if self.ATA_lost and self.first_ATAgood:
             return True, False
         # 超过时间限制
         elif self.time_step >= self.max_timestep:

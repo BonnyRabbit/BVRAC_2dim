@@ -51,7 +51,7 @@ class TSCallback(BaseCallback):
             action = self.locals['actions'][env_idx]
             clipped_action = np.array([
                 np.clip(action[0], -1, 1) * np.deg2rad(30),
-                np.clip(action[1], -1, 1) * 1
+                np.clip(action[1], -1, 1) * 4
             ])
             buffer['actions'].append(clipped_action)
             buffer['observations'].append(self.locals['new_obs'][env_idx])

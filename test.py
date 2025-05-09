@@ -9,7 +9,7 @@ from fdmEnv import BVRAC, SIXCLOCK_TRACK
 stage = 2
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-log_dir = f'logs/stage{stage}_keep_intrack/'
+log_dir = f'logs/stage{stage}_keep_intrack5.1/'
 os.makedirs(log_dir, exist_ok=True)
 # model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 # model_path = os.path.join(log_dir, 'BVRAC_2dim_3740000_steps.zip')
@@ -18,7 +18,7 @@ model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 
 model = PPO.load(model_path, device='cuda' if torch.cuda.is_available() else 'cpu')
 
-env = BVRAC()
+env = SIXCLOCK_TRACK()
 
 obs, _ = env.reset()
 
@@ -28,6 +28,7 @@ step = 0
 steps = []
 pursuer_traj = []  
 target_traj = []
+speed_traj = []
 ATA_traj = []   
 AA_traj = []
 action_traj = []
@@ -42,11 +43,13 @@ while not done:
     pursuer_y = obs[1] * scaling_factor
     target_x = obs[2] * scaling_factor
     target_y = obs[3] * scaling_factor
+    speed = obs[5] * (340 / 9.8)
     ATA = obs[11] * 180/np.pi
     AA = obs[12] * 180/np.pi
     
     pursuer_traj.append((pursuer_x, pursuer_y))
     target_traj.append((target_x, target_y))
+    speed_traj.append(speed)
     ATA_traj.append(ATA)
     AA_traj.append(AA)
     steps.append(step)
@@ -55,6 +58,7 @@ while not done:
 
 pursuer_x, pursuer_y = zip(*pursuer_traj)
 target_x, target_y = zip(*target_traj)
+speed = speed_traj
 ATA = ATA_traj
 AA = AA_traj
 action = action_traj    
@@ -97,3 +101,13 @@ plt.legend()
 plt.grid(True)
 plt.savefig(os.path.join(fig_dir, 'dphi_vs_time.png'))
 print("图像已保存为 dphi_vs_time.png")
+
+plt.figure(figsize=(10, 8))
+plt.plot(np.array(steps) * 0.25, speed_traj, 'b-', label='V (m/s)')
+plt.xlabel('Time(s)', fontsize=16)
+plt.ylabel('V (m/s)')
+plt.title('V vs Time')
+plt.legend()
+plt.grid(True)
+plt.savefig(os.path.join(fig_dir, 'speed_vs_time.png'))
+print("图像已保存为 speed_vs_time.png")

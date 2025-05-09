@@ -24,12 +24,12 @@ def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
 
-    log_dir = f'logs/stage{stage}_keep_intrack/'
+    log_dir = f'logs/stage{stage}_keep_intrack5.1/'
     os.makedirs(log_dir, exist_ok=True)
 
-    pretrained_path = os.path.join(f'logs/stage{stage}/', 'best_model/best_model.zip')
+    pretrained_path = os.path.join(f'logs/stage{stage}_keep_intrack4', 'best_model/best_model.zip')
 
-    n_envs = 4
+    n_envs = 8
     batch_size = 64
     n_steps = batch_size // n_envs
 
@@ -55,7 +55,7 @@ def main():
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.25,
-            ent_coef=0.0,
+            ent_coef=0.005,
             vf_coef=0.5,
             max_grad_norm=0.5,
             policy_kwargs=dict(
@@ -116,7 +116,7 @@ def main():
         total_timesteps=total_timesteps,
         callback=callbacks,
         tb_log_name='BVRAC_2dim',
-        reset_num_timesteps=False,
+        reset_num_timesteps=True,
         progress_bar=True
     )
 

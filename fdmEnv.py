@@ -205,7 +205,7 @@ class BVRAC(gym.Env):
         aspect_angle = BVRAC.compute_AATA(x, y, x_t, y_t, psi_t)
         angle2aspect = BVRAC.compute_AATA(x, y, x_t, y_t, psi)
 
-                # 判断是否丢失视线
+        # 判断是否丢失视线
         if angle2aspect <= np.deg2rad(30):
             self.ATA_lost_step = 0
             self.first_ATAgood = True # 第一次进入视线优势区
@@ -354,6 +354,246 @@ class SIXCLOCK_TRACK(BVRAC):
         if rel_dist >= 2000 and self.reward_flags[2000]:
             return True, False
         if self.ATA_lost and self.first_ATAgood:
+            return True, False
+        # 超过时间限制
+        elif self.time_step >= self.max_timestep:
+            return True, True
+        else:
+            return False, False
+    
+class WVRAC(SIXCLOCK_TRACK):
+    def __init__(self, single_turn_times=1, s_turn_times=2):
+        super().__init__()
+        self.maneuver_mode = None
+        self.s_turn_direction = None
+        self.s_turn_stage = None
+        self.s_turn_psi_list = None
+        self.psi_t_des = None
+        self.single_turn_times = single_turn_times
+        self.s_turn_times = s_turn_times
+        self.single_turn_count = 0
+        self.s_turn_count = 0
+        self.track_out_step = 0
+
+        self.max_reward_angle = 50
+    def maneuver_library(self, mode, psi_t):
+        """
+        机动库
+        mode: 机动模式, 1为单方向转弯, 2为S转弯
+        return: phi_t
+        """
+        if mode == 1:
+            if self.single_turn_count >= self.single_turn_times:
+                return 0
+            if self.psi_t_des is None or self.single_turn_direction is None:
+                direction = np.random.choice([-1, 1])
+                self.single_turn_direction = direction
+                self.psi_t_des = self.check_heading(psi_t + direction * np.pi)
+            if abs(self.psi_t_des - psi_t) >= np.deg2rad(20):
+                return np.deg2rad(8) * self.single_turn_direction
+            else:
+                self.single_turn_count += 1
+                self.psi_t_des = None
+                self.single_turn_direction = None
+                return 0
+        elif mode == 2:
+            if self.s_turn_count >= self.s_turn_times:
+                return 0
+            if self.s_turn_stage is None:
+                self.psi_t_des = psi_t
+                direction = np.random.choice([-1, 1])
+                self.s_turn_direction = direction
+                self.s_turn_stage = 0
+                self.s_turn_psi_list = [
+                    self.psi_t_des + direction * np.deg2rad(50),   
+                    self.psi_t_des - direction * np.deg2rad(50),   
+                    self.psi_t_des                                  
+                ]
+            psi_target = self.s_turn_psi_list[self.s_turn_stage]
+            if abs(psi_t - psi_target) >= np.deg2rad(3):
+                if self.s_turn_stage == 1:
+                    turn_dir = -self.s_turn_direction
+                else:
+                    turn_dir = self.s_turn_direction
+                return np.deg2rad(8) * turn_dir
+            else:
+                self.s_turn_stage += 1
+                if self.s_turn_stage >= len(self.s_turn_psi_list):
+                    self.s_turn_stage = None
+                    self.s_turn_psi_list = None
+                    self.s_turn_direction = None
+                    self.psi_t_des = None
+                    self.s_turn_count += 1
+                    return 0
+                return 0
+        return 0
+
+    def reset(self, seed=None):
+        observation, _ = super().reset(seed)
+        self.maneuver_mode = None
+        self.s_turn_direction = None
+        self.s_turn_stage = None
+        self.s_turn_psi_list = None
+        self.psi_t_des = None
+        self.single_turn_direction = None
+        self.single_turn_count = 0
+        self.s_turn_count = 0
+        self.track_out_step = 0
+        return observation, {}
+    
+    def run(self, state, action):
+        # 追击无人机:
+        x, y = state['x'], state['y']
+        v = state['v']
+        phi = state['phi']
+        psi = state['psi']
+        dphi = np.clip(action[0], -1, 1) * np.deg2rad(30)
+        dv = np.clip(action[1], -1, 1) * 4
+        dx = v * np.sin(psi)
+        dy = v * np.cos(psi)
+        v += dv * self.dt
+        v = np.clip(v, 60, 120)
+        dpsi = 9.81/v * np.tan(phi)
+        phi += dphi * self.dt
+        psi += dpsi * self.dt
+        x += dx * self.dt
+        y += dy * self.dt
+
+        # 逃逸无人机:
+        x_t, y_t = state['x_t'], state['y_t']
+        phi_t = state['phi_t']
+        psi_t = state['psi_t']
+        v_t = 60
+
+        pursuer_pos = np.array([x, y])
+        target_pos = np.array([x_t, y_t])
+        rel_dist = np.linalg.norm(pursuer_pos - target_pos)
+        if rel_dist < 4000:
+            if self.maneuver_mode is None:
+                self.maneuver_mode = np.random.choice([1, 2])
+            phi_t = self.maneuver_library(self.maneuver_mode, psi_t)
+            if (self.maneuver_mode == 1 and self.single_turn_count >= self.single_turn_times) or \
+               (self.maneuver_mode == 2 and self.s_turn_count >= self.s_turn_times):
+                self.maneuver_mode = None
+        else:
+            phi_t = 0
+            self.maneuver_mode = None
+
+        dphi_t = phi_t
+        dx_t = v_t * np.sin(psi_t)
+        dy_t = v_t * np.cos(psi_t)
+        dpsi_t = 9.81/v_t * np.tan(phi_t)
+        phi_t += dphi_t * self.dt
+        psi_t += dpsi_t * self.dt
+        x_t += dx_t * self.dt
+        y_t += dy_t * self.dt
+
+        phi = np.clip(phi, np.deg2rad(-30), np.deg2rad(30))
+        psi = BVRAC.check_heading(psi)
+        psi_t = BVRAC.check_heading(psi_t)
+
+        aspect_angle = BVRAC.compute_AATA(x, y, x_t, y_t, psi_t)
+        angle2aspect = BVRAC.compute_AATA(x, y, x_t, y_t, psi)
+
+        # 判断是否丢失视线
+        if angle2aspect <= np.deg2rad(60):
+            self.ATA_lost_step = 0
+            self.first_ATAgood = True
+            self.ATA_lost = False
+        else:
+            self.ATA_lost_step += 1
+            if self.first_ATAgood:
+                self.ATA_lost = self.ATA_lost_step >= 200
+        # 判断是否在尾追优势区
+        if 150 <= rel_dist <= 450:
+            self.track_inbound = True
+            self.step_track_inboud += 1
+            self.track_out_step = 0  # 新增：重置出区计数
+        else:
+            if hasattr(self, "track_out_step"):
+                self.track_out_step += 1
+            else:
+                self.track_out_step = 1
+            if self.track_out_step > 100:
+                self.track_inbound = False
+                self.step_track_inboud = 0
+
+        state = {
+            'x': x,
+            'y': y,
+            'x_t': x_t,
+            'y_t': y_t,
+            'rel_dist': rel_dist,
+            'v': v,
+            'v_t': v_t,
+            'phi': phi,
+            'phi_t': phi_t,
+            'psi': psi,
+            'psi_t': psi_t,
+            'ATA': angle2aspect,
+            'AA': aspect_angle,
+        }
+        return state
+    
+    def get_reward(self, state):
+        reward = 0.0
+        reward_ATA = 0.0
+        reward_speed = 0.0
+        rel_speed = (state['v'] - state['v_t'])
+        if abs(rel_speed) <= 5:
+            self.speed_keep_step += 1
+        else:
+            self.speed_keep_step = 0
+
+        rel_dist = max(state['rel_dist'], 1e-6)
+        angle_2_aspect = state['ATA']
+        v_des = 60 + np.sqrt(max(0, 72 * (rel_dist - 250) / 35))
+        v_tol = 5
+
+        # 奖励计算
+        reward_ATA = 1 - abs(angle_2_aspect / (np.deg2rad(30)))
+        # 距离较远时鼓励加速追踪：
+        if rel_dist >= 2000:
+            reward_speed -= (120 - state['v']) / 60
+        # 初次接近2km时，稀疏奖励
+        if 300 <= rel_dist <= 2000 and not self.reward_flags[2000]:
+            reward += 20.0
+            self.reward_flags[2000] = True
+        # 距离较近时鼓励减速尾追，多个flag引导任务：
+        if 300 <= rel_dist <= 2000:
+            reward_speed -= abs(state['v'] - v_des) / v_tol
+        reward_dist = [
+            (1350, 20.0),
+            (800, 20.0),
+            (500, 20.0)
+        ]
+        for dist, r in reward_dist:
+            if rel_dist <= dist and abs(state['v'] - v_des) <= v_tol and not self.reward_flags[dist]:
+                reward += r
+                self.reward_flags[dist] = True
+        # 进入zone:
+        if self.track_inbound:
+            reward_speed -= rel_speed / v_tol
+        # 保持奖励
+        if self.track_inbound and abs(rel_speed) <= 5 and self.step_track_inboud >= 200:
+            reward += 100.0
+        # 跟丢惩罚
+        if rel_dist >= 2000 and self.reward_flags[2000]:
+            reward -= 20
+
+        reward += (
+            self.reward_weights['speed'] * reward_speed +
+            self.reward_weights['angle'] * reward_ATA
+        )
+        return reward
+    
+    def get_done(self, state):
+        rel_dist = state['rel_dist']
+        rel_speed = state['v'] - state['v_t']
+        # 200-300m内且尾追一段时间
+        if self.track_inbound and abs(rel_speed) <= 5 and self.step_track_inboud >= 200:
+            return True, False
+        if rel_dist >= 2000 and self.reward_flags[2000]:
             return True, False
         # 超过时间限制
         elif self.time_step >= self.max_timestep:

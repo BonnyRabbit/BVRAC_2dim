@@ -4,12 +4,13 @@ import torch
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 
-from fdmEnv import BVRAC, SIXCLOCK_TRACK
+from fdmEnv import BVRAC, SIXCLOCK_TRACK, WVRAC
 
-stage = 2
+stage = 3
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-log_dir = f'logs/stage{stage}_keep_intrack5.1/'
+# log_dir = f'logs/stage{stage}_keep_intrack5.1/'
+log_dir = f'logs/stage{stage}_maneuver2/'
 os.makedirs(log_dir, exist_ok=True)
 # model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 # model_path = os.path.join(log_dir, 'BVRAC_2dim_3740000_steps.zip')
@@ -18,7 +19,7 @@ model_path = os.path.join(log_dir, 'best_model/best_model.zip')
 
 model = PPO.load(model_path, device='cuda' if torch.cuda.is_available() else 'cpu')
 
-env = SIXCLOCK_TRACK()
+env = WVRAC()
 
 obs, _ = env.reset()
 

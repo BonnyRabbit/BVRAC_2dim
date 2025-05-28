@@ -4,11 +4,11 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
-from fdmEnv import BVRAC, SIXCLOCK_TRACK
+from fdmEnv import BVRAC, SIXCLOCK_TRACK, WVRAC
 from callback import TSCallback
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-stage = 2
+stage = 3
 
 def make_env(stage):
     def _init():
@@ -16,6 +16,8 @@ def make_env(stage):
             env = BVRAC()
         elif stage == 2:
             env = SIXCLOCK_TRACK()
+        elif stage == 3:
+            env = WVRAC()
         print(f"Environment created: {env}")
         return env
     return _init
@@ -24,12 +26,12 @@ def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
 
-    log_dir = f'logs/stage{stage}_keep_intrack5.1/'
+    log_dir = f'logs/stage{stage}_maneuver2/'
     os.makedirs(log_dir, exist_ok=True)
 
-    pretrained_path = os.path.join(f'logs/stage{stage}_keep_intrack4', 'best_model/best_model.zip')
+    pretrained_path = os.path.join(f'logs/stage2_keep_intrack5.1', 'best_model/best_model.zip')
 
-    n_envs = 8
+    n_envs = 4
     batch_size = 64
     n_steps = batch_size // n_envs
 

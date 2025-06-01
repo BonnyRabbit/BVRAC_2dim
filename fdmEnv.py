@@ -13,7 +13,6 @@ class LAND(gym.Env):
         self.time_step = 0
         self.max_timestep = 5000
         self.state_prev = None
-        #self.V_base = 25
         self.RefArea = 0.070331
         self.pho = 1.225
 

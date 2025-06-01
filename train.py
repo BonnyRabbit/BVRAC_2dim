@@ -4,18 +4,20 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
-from fdmEnv import BVRAC, SIXCLOCK_TRACK
+from fdmEnv import LAND
 from callback import TSCallback
+from datetime import datetime
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-stage = 2
+stage = 1
 
-def make_env(stage):
+now = datetime.now()
+date_str = datetime.now().strftime("%Y-%m-%d_%H")
+
+
+def make_env():
     def _init():
-        if stage == 1:
-            env = BVRAC()
-        elif stage == 2:
-            env = SIXCLOCK_TRACK()
+        env = LAND()
         print(f"Environment created: {env}")
         return env
     return _init
@@ -24,18 +26,19 @@ def main():
     torch.autograd.set_detect_anomaly(True)
     start_time = time.time()
 
-    log_dir = f'logs/stage{stage}_keep_intrack/'
+    log_dir = f'logs/landing_train_{date_str}/'
+    save_model_path = f'logs/'
     os.makedirs(log_dir, exist_ok=True)
 
-    pretrained_path = os.path.join(f'logs/stage{stage}/', 'best_model/best_model.zip')
+    pretrained_path = os.path.join(f'logs/', 'best_model/best_model.zip')
 
     n_envs = 4
     batch_size = 64
     n_steps = batch_size // n_envs
 
-    eval_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
+    eval_env = SubprocVecEnv([make_env() for _ in range(n_envs)])
 
-    train_env = SubprocVecEnv([make_env(stage=stage) for _ in range(n_envs)])
+    train_env = SubprocVecEnv([make_env() for _ in range(n_envs)])
 # 单一环境pdb.set_trace()用于调试
     # eval_env = DummyVecEnv([make_env(stage=stage) for _ in range(n_envs)])
     # train_env = DummyVecEnv([make_env(stage=stage) for _ in range(n_envs)])
@@ -55,7 +58,7 @@ def main():
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.25,
-            ent_coef=0.0,
+            ent_coef=0.01,
             vf_coef=0.5,
             max_grad_norm=0.5,
             policy_kwargs=dict(
@@ -97,11 +100,11 @@ def main():
         CheckpointCallback(
             save_freq=20000 // n_envs,
             save_path=log_dir,
-            name_prefix='BVRAC_2dim',
+            name_prefix='LAND_3dim',
         ),
         EvalCallback(
             eval_env,
-            best_model_save_path=os.path.join(log_dir, 'best_model'),
+            best_model_save_path=os.path.join(save_model_path, 'best_model'),
             log_path=log_dir,
             eval_freq=10000 // n_envs,
             deterministic=True,
@@ -115,12 +118,12 @@ def main():
     model.learn(
         total_timesteps=total_timesteps,
         callback=callbacks,
-        tb_log_name='BVRAC_2dim',
+        tb_log_name='LAND_3dim',
         reset_num_timesteps=False,
         progress_bar=True
     )
 
-    model.save(os.path.join(log_dir, 'final_model'))
+    model.save(os.path.join(save_model_path, 'final_model'))
     print("Model saved before exit.")
 
     end_time = time.time()

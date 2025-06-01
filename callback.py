@@ -7,7 +7,7 @@ from typing import Dict
 class TSCallback(BaseCallback):
     def __init__(self,
                  log_dir: str,
-                 log_freq: int = 20,
+                 log_freq: int = 200,
                  verbose: int = 0,  ):
         super().__init__(verbose)
         self.log_dir = os.path.join(log_dir, 'custom_metrics')
@@ -16,10 +16,9 @@ class TSCallback(BaseCallback):
 
         self.episode_buffers: Dict[int, dict] = {}
         self.episode_counter = 0
-        self.action_names = ['dphi', 'dv']
+        self.action_names = ['tht', 'thr', 'phi', 'ay']
         self.obs_names = [
-            'x', 'y', 'x_t', 'y_t', 'rel_dist', 'v', 'v_t', 'phi', 'phi_t', 'psi', 'psi_t',
-            'ATA', 'AA'
+            'x', 'y', 'z','V', 'gamma', 'psi', 'alpha'
         ]
 
     def _init_callback(self) -> None:
@@ -27,11 +26,11 @@ class TSCallback(BaseCallback):
         self.writer = SummaryWriter(log_dir=self.log_dir)
 
     def _convert_value(self, name: str, value: float) -> float:
-        if name in ['dphi', 'phi', 'phi_t', 'psi', 'psi_t', 'AA', 'ATA']:
+        if name in ['tht', 'phi', 'gamma', 'psi', 'alpha']:
             return value * 180 / np.pi
-        elif name in ['x', 'y', 'x_t', 'y_t', 'rel_dist']:
+        elif name in ['x', 'y', 'z']:
             return value * (340**2) / 9.8
-        elif name in ['v', 'v_t']:
+        elif name in ['V']:
             return value * 340 / 9.8
         else:
             return value
@@ -50,8 +49,10 @@ class TSCallback(BaseCallback):
             buffer = self.episode_buffers[env_idx]
             action = self.locals['actions'][env_idx]
             clipped_action = np.array([
-                np.clip(action[0], -1, 1) * np.deg2rad(30),
-                np.clip(action[1], -1, 1) * 1
+                np.clip(action[0], -1, 1) * np.deg2rad(12),
+                (np.clip(action[1], -1, 1) + 1) * 0.5,
+                np.clip(action[2], -1, 1) * np.deg2rad(30),
+                np.clip(action[3], -1, 1) * 3,
             ])
             buffer['actions'].append(clipped_action)
             buffer['observations'].append(self.locals['new_obs'][env_idx])

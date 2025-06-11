@@ -7,7 +7,7 @@ from typing import Dict
 class TSCallback(BaseCallback):
     def __init__(self,
                  log_dir: str,
-                 log_freq: int = 200,
+                 log_freq: int = 1000,
                  verbose: int = 0,  ):
         super().__init__(verbose)
         self.log_dir = os.path.join(log_dir, 'custom_metrics')
@@ -18,7 +18,7 @@ class TSCallback(BaseCallback):
         self.episode_counter = 0
         self.action_names = ['tht', 'thr', 'phi', 'ay']
         self.obs_names = [
-            'x', 'y', 'z','V', 'gamma', 'psi', 'alpha'
+            'x', 'y', 'z','V', 'gamma', 'psi', 'alpha', 'hdot'
         ]
 
     def _init_callback(self) -> None:
@@ -30,7 +30,7 @@ class TSCallback(BaseCallback):
             return value * 180 / np.pi
         elif name in ['x', 'y', 'z']:
             return value * (340**2) / 9.8
-        elif name in ['V']:
+        elif name in ['V','hdot']:
             return value * 340 / 9.8
         else:
             return value

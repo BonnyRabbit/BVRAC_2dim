@@ -7,6 +7,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 from fdmEnv import LAND
 from callback import TSCallback
 from datetime import datetime
+import numpy as np
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 stage = 1
@@ -33,7 +34,7 @@ def main():
     pretrained_path = os.path.join(f'logs/', 'best_model/best_model.zip')
 
     n_envs = 4
-    batch_size = 64
+    batch_size = 2048
     n_steps = batch_size // n_envs
 
     eval_env = SubprocVecEnv([make_env() for _ in range(n_envs)])
@@ -45,8 +46,11 @@ def main():
 
     if os.path.exists(pretrained_path):
         print(f"Loading pretrained model from {pretrained_path}")
-        model = PPO.load(
-            pretrained_path,
+        # 先加载旧模型（只提取 policy）
+        old_model = PPO.load(pretrained_path)
+        policy_class = old_model.policy.__class__
+        model = PPO(
+            policy_class,
             env=train_env,
             verbose=0,
             device=device,
@@ -55,19 +59,21 @@ def main():
             n_steps=n_steps,
             batch_size=batch_size,
             n_epochs=10,
-            gamma=0.99,
+            gamma=0.9999,
             gae_lambda=0.95,
             clip_range=0.25,
-            ent_coef=0.01,
+            ent_coef=0.001,
             vf_coef=0.5,
             max_grad_norm=0.5,
             policy_kwargs=dict(
                 net_arch=dict(
                     pi=[512, 256],
                     vf=[512, 256]
-                )
+                ),
+                log_std_init=-0.6931               
             )
         )
+        # model.policy.load_state_dict(old_model.policy.state_dict())
         print("Successfully loaded pretrained model!")
     else:
         print("No pretrained model found, initializing new model.")
@@ -82,23 +88,24 @@ def main():
             n_steps=n_steps,          # 每次更新前在每个环境中运行的步数
             batch_size=batch_size,    # 小批量大小
             n_epochs=10,              # 优化代理损失时的迭代次数
-            gamma=0.99,               # 折扣因子
+            gamma=0.9999,               # 折扣因子
             gae_lambda=0.95,          # GAE lambda 参数
             clip_range=0.25,          # PPO 剪切参数
-            ent_coef=0.001,             # 熵系数
+            ent_coef=0.01,            # 熵系数
             vf_coef=0.5,              # 值函数系数
             max_grad_norm=0.5,        # 梯度最大范数
             policy_kwargs=dict(
                 net_arch=dict(
                     pi=[512, 256],
                     vf=[512, 256]
-                    )
+                ),
+                log_std_init=-0.6931
                 )  # pi、vf 网络结构
         )
 
     callbacks = [
         CheckpointCallback(
-            save_freq=20000 // n_envs,
+            save_freq=10000 // n_envs,
             save_path=log_dir,
             name_prefix='LAND_3dim',
         ),
@@ -114,7 +121,7 @@ def main():
     ]
 
     total_timesteps = 5_000_000
-
+    
     model.learn(
         total_timesteps=total_timesteps,
         callback=callbacks,
